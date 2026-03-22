@@ -4,10 +4,12 @@ from collections.abc import Awaitable, Callable
 from typing import TypeAlias
 
 from rich.console import RenderableType
+from rich.markdown import Markdown
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
-from textual.widgets import Input, Static
+from textual.widget import Widget
+from textual.widgets import DataTable, Input, Static
 
 
 SubmitResult: TypeAlias = Awaitable[None] | None
@@ -139,12 +141,17 @@ class ShellApp(App[None]):
             self.composer_spinner.update("")
             raise
 
-    async def _append_item(self, content: RenderableType | object) -> None:
-        widget = Static(content, classes="transcript-entry")
+    async def _append_item(self, content: RenderableType | Widget | object) -> None:
+        if isinstance(content, Widget):
+            widget = content
+            widget.add_class("transcript-entry")
+        else:
+            widget = Static(content, classes="transcript-entry")
+
         await self.transcript_flow.mount(widget)
         self.transcript_scroll.scroll_end(animate=False)
 
-    def write(self, content: RenderableType | object) -> None:
+    def write(self, content: RenderableType | Widget | object) -> None:
         self.run_worker(self._append_item(content), exclusive=False)
 
     def set_loading(self, is_loading: bool) -> None:
@@ -216,7 +223,7 @@ class ShellApp(App[None]):
 class Shell:
     def __init__(self) -> None:
         self.app = ShellApp()
-        self._pending_prints: list[RenderableType | object] = []
+        self._pending_prints: list[RenderableType | Widget | object] = []
         self._pending_input_prompt: RenderableType | object | None = None
         self._pending_loading = False
         self._initialized = False
@@ -259,11 +266,15 @@ class Shell:
         else:
             callback()
 
-    def print(self, content: RenderableType | object) -> None:
+    def print(self, content: RenderableType | Widget | object) -> None:
         if not self.app.is_running:
             self._pending_prints.append(content)
             return
         self._call_in_app(lambda: self.app.write(content))
+
+    def print_markdown(self, text: str) -> None:
+        """Helper to instantly print parsed Markdown."""
+        self.print(Markdown(text))
 
     def set_loading(self, is_loading: bool) -> None:
         if not self.app.is_running:
@@ -345,10 +356,33 @@ class Agent:
         self.shell = shell
 
     async def run(self, text: str) -> None:
-        self.shell.print_to_input("What is one detail I should include?")
+        # 1. Printing standard Markdown
+        self.shell.print_markdown(
+            f"### Subagent Task\nYou asked me to look into: **{text}**"
+        )
+
+        # 2. Live Updating Subagent Results
+        live_status = Static("⏳ [yellow]Subagent is fetching data...[/yellow]")
+        self.shell.print(live_status)
+
+        # Simulate network delay / subagent thinking
+        await asyncio.sleep(1.5)
+
+        # Update the exact same widget live
+        live_status.update("✅ [green]Subagent successfully fetched the data![/green]")
+
+        # 3. Custom Tool Rendering (e.g., a DataTable)
+        table = DataTable()
+        table.add_columns("Tool Name", "Execution Status", "Latency")
+        table.add_row("Search Web", "Success", "1.2s")
+        table.add_row("Read File", "Skipped", "0.0s")
+        self.shell.print(table)
+
+        # Interactive followup
+        self.shell.print_to_input("What would you like to do next?")
         detail = await self.shell.input()
         self.shell.print(
-            f"[bold magenta]Agent[/bold magenta]\nYou said: {text}\nDetail: {detail}"
+            f"[bold magenta]Agent[/bold magenta]\nGot it. Moving on to: {detail}"
         )
 
 
@@ -358,7 +392,9 @@ class Demo:
         self.agent = Agent(self.shell)
 
     async def on_ready(self) -> None:
-        self.shell.print("Type a message and the agent will respond.")
+        self.shell.print_markdown(
+            "**Welcome!** Type a message to see the custom widgets in action."
+        )
 
     async def on_submit(self, text: str) -> None:
         self.shell.print(f"[bold cyan]User[/bold cyan]\n{text}")
