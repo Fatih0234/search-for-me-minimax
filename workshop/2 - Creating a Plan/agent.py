@@ -14,6 +14,7 @@ import subprocess
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.text import Text
+from shell import Shell
 
 os.environ["OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"] = "true"
 
@@ -542,3 +543,49 @@ with logfire.span("agent_session"):
         )
         agent.run_until_idle(contents)
         console.print()
+
+
+class Runtime:
+    
+
+# class WorkshopApp:
+#     def __init__(self):
+#         self.shell = 
+#         self.agent = Agent(
+#             tools=[ReadFile, Bash, ModifyTodo], run_state=AgentRunState()
+#         )
+#         self.hooks = UIHooks(self.shell)
+#         self.contents: list[types.Content] = []
+
+#         self.agent.on("turn_start", self.hooks.print_turn_start)
+#         self.agent.on("llm_response", self.hooks.print_llm_response)
+#         self.agent.on("llm_tool_call", self.hooks.print_llm_tool_call)
+#         self.agent.on("llm_tool_result", self.hooks.print_llm_tool_result)
+
+#         def ensure_all_todos_completed(
+#             _: types.Content, run_state: AgentRunState
+#         ) -> bool:
+#             return not run_state.todos
+
+#         self.agent.on("verify_turn_complete", ensure_all_todos_completed)
+
+#     async def on_submit(self, text: str) -> None:
+#         # User input is now inline with a little *
+#         self.shell.print(Text(f"* Assistant: {text}", style="bold cyan"))
+#         self.contents.append(types.UserContent(parts=[types.Part.from_text(text=text)]))
+
+#         self.shell.print(Text(f"* You: {text}", style="bold cyan"))
+#         self.shell.set_loading(True)
+#         try:
+#             with logfire.span("agent_session_turn"):
+#                 await self.agent.run_until_idle(self.contents)
+#         finally:
+#             self.shell.set_loading(False)
+
+#     def run(self):
+#         self.shell.initialize(on_submit=self.on_submit)
+#         self.shell.run()
+
+
+# if __name__ == "__main__":
+#     WorkshopApp().run()
