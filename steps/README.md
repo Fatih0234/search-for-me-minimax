@@ -1,12 +1,10 @@
-# Build Your Own Deep Research Agent
+# Steps
 
-This repo is being rebuilt as a step-by-step workshop.
+This folder is the new step-by-step build-up for the agent runtime.
 
 The goal is to mirror the teaching style from `koroku/workshop`: start with the smallest possible thing, then add one idea at a time.
 
-## Steps
-
-The progression lives in [steps](/Users/ivanleo/Documents/coding/build-your-own-deep-research-agent/steps).
+## Step Order
 
 ### `01-minimal-call`
 
