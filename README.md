@@ -1,103 +1,41 @@
 # Build Your Own Deep Research Agent
 
-This repo is being rebuilt as a step-by-step workshop.
+A step-by-step workshop that builds a deep research agent from scratch. Each step introduces one idea, starting from a raw API call and ending with a planning agent that delegates to subagents.
 
-The goal is to mirror the teaching style from `koroku/workshop`: start with the smallest possible thing, then add one idea at a time.
+## How the code progresses
 
-## Steps
+The code lives in [`steps/`](steps/). Each folder is a self-contained snapshot — you can run any step on its own.
 
-The progression lives in [steps](/Users/ivanleo/Documents/coding/build-your-own-deep-research-agent/steps).
+```
+steps/
+├── 01-minimal-call          → agent.py
+├── 02-single-tool           → agent.py
+├── 03-tool-runtime          → agent.py, tools.py
+├── 04-run-state-and-context → agent.py, tools.py, state.py
+├── 05-hooks                 → agent.py, tools.py, state.py
+├── 06-creating-an-agent     → agent.py, tools.py, state.py
+├── 07-subagents             → agent.py, tools.py, state.py, app.py
+├── 08-beautifying-the-outputs → agent.py, tools.py, state.py, app.py
+└── 09-generating-a-plan     → agent.py, tools.py, state.py, app.py
+```
 
-### `01-minimal-call`
+1. **`01-minimal-call`** — Make the smallest possible Gemini call with a hand-written tool schema. See what a `FunctionCall` looks like. Never actually execute the tool.
+2. **`02-single-tool`** — Add a real `read_file` handler, execute the call, send the result back as a `FunctionResponse`. Full manual round-trip, but everything is hard-coded.
+3. **`03-tool-runtime`** — Extract a `Tool` dataclass (name, Pydantic args model, async handler) and an `AgentRuntime` that dispatches by name. First file split: `tools.py`.
+4. **`04-run-state-and-context`** — Add `state.py` with `RunConfig`, `RunState`, and `AgentContext`. Tool handlers receive `(args, state, context)`. Iteration limits and todo tracking live in the right place.
+5. **`05-hooks`** — Decouple rendering from the core loop with `.on("message", ...)`, `.on("llm_tool_call", ...)`, `.on("tool_result", ...)`. Add `prepare_request()` and a user input REPL.
+6. **`06-creating-an-agent`** — Rename `AgentRuntime` → `Agent`, add `run_until_idle()` that loops until the model stops calling tools. Nudge the model if `state.is_incomplete()`.
+7. **`07-subagents`** — Spawn child `Agent` instances with their own config, state, and iteration budget. Dispatch search queries concurrently. Add `app.py` as the new entrypoint.
+8. **`08-beautifying-the-outputs`** — Richer tool result rendering (syntax-highlighted file reads, formatted errors, bash exit codes). Runtime unchanged — all work is in hook callbacks.
+9. **`09-generating-a-plan`** — Add a `mode` field (`"plan"` / `"execute"`) to `RunState`. Plan mode offers only `generate_plan`; calling it seeds todos and switches to execute mode with the full tool set.
 
-Accomplish:
+See [`report.md`](report.md) for a sample output from the step 09 agent.
 
-- make the smallest possible Gemini call
-- declare a tool schema manually
-- inspect what a model-emitted function call actually looks like
+## Running a step
 
-This step is intentionally bare. The point is to see the raw API shape before adding any runtime abstractions.
+```bash
+cd steps/09-generating-a-plan
+python app.py  # or agent.py for earlier steps
+```
 
-### `02-single-tool`
-
-Accomplish:
-
-- implement one real tool handler
-- execute the tool after the model calls it
-- send the function response back to the model
-
-By the end of this step, you have a full manual tool round-trip with no shared runtime yet.
-
-### `03-tool-runtime`
-
-Accomplish:
-
-- extract a reusable `Tool` definition
-- validate typed tool args at the runtime boundary
-- stop hand-wiring every tool execution path
-
-This is the first real runtime step: the code starts to become reusable without getting abstract for abstraction's sake.
-
-### `04-run-state-and-context`
-
-Accomplish:
-
-- separate static configuration from mutable run state
-- separate runtime dependencies from both
-- introduce `RunConfig`, `RunState`, and `AgentContext`
-- make concepts like iteration limits, todos, and clients live in the right place
-
-### `05-hooks`
-
-Accomplish:
-
-- add explicit extension points for rendering and observation
-- introduce `prepare_request()`, `message`, `llm_tool_call`, and `tool_result`
-- keep request shaping visible through `prepare_request()`
-- avoid turning the runtime loop into a giant conditional renderer
-
-### `06-creating-an-agent`
-
-Accomplish:
-
-- wrap the runtime in an `Agent` class
-- add a `run_until_idle()` loop that keeps going until tool use is finished
-- move from one-off scripts to a reusable agent abstraction
-
-### `07-subagents`
-
-Accomplish:
-
-- delegate focused work to child agents
-- give each subagent its own bounded run config and state
-- let the parent aggregate subagent results
-- show live progress for concurrent delegated queries
-
-### `08-prompt-builder`
-
-Accomplish:
-
-- move prompt construction into one place
-- compose prompts from reusable parts instead of scattering strings around
-- make later upgrades like templating possible without changing the runtime shape
-
-## Rules For These Steps
-
-- Each step should introduce one main idea.
-- Avoid skipping directly to the final architecture.
-- Prefer plain functions and small dataclasses over deep class hierarchies.
-- Validate tool arguments early at the runtime boundary.
-- Do not use defensive patterns like `call.args or {}` when required inputs are missing.
-- Keep the hook story because it matches the workshop format well.
-
-## Intended Outcome
-
-By the later steps, we should have:
-
-- a clean hook-based runtime
-- typed tool argument validation
-- explicit config/state/context boundaries
-- flexible rendering through hooks
-- support for bounded subagents
-
-without losing the incremental workshop feel.
+Requires a `GEMINI_API_KEY` environment variable. Later steps also use `EXA_API_KEY` for web search.
