@@ -70,6 +70,12 @@ class Agent:
         tools = []
         if self.state.iteration_count < self.config.max_iterations:
             tools = [tool.to_genai_tool() for tool in self.tools.values()]
+        else:
+            contents.append(
+                types.Part.from_bytes(
+                    text="You've reached the maximum number of iterations, generate a quick summary of everything you've accomplished."
+                )
+            )
         config = types.GenerateContentConfig(
             tools=tools,
             system_instruction=SYSTEM_INSTRUCTION,
@@ -135,8 +141,15 @@ class Agent:
             function_calls = [
                 part.function_call for part in message.parts if part.function_call
             ]
+
             if not function_calls:
-                return
+                is_incomplete_reason = self.state.is_incomplete()
+
+                if is_incomplete_reason:
+                    contents.append(types.Part.from_text(text=is_incomplete_reason))
+                    continue
+
+                break
 
             previous_state = deepcopy(self.state)
             tool_parts: list[types.Part] = []

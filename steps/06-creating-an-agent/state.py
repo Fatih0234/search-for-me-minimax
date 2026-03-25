@@ -38,8 +38,21 @@ class RunState:
             removed.append(existing)
         return removed, not_found
 
+    def is_incomplete(self, config: RunConfig) -> str | None:
+        if self.todos:
+            return f"""
+You still have pending todos.
+
+<todos>
+{chr(10).join(self.todos)}
+</todos>
+
+Check off all todos before you end.
+""".strip()
+
+        return None
+
 
 @dataclass(slots=True)
 class AgentContext:
     pass
-
