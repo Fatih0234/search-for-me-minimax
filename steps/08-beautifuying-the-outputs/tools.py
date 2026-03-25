@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Literal, TypeVar
+from typing import Any, Awaitable, Callable, Literal, TypeAlias, TypeVar
 
 from google.genai import types
 from pydantic import BaseModel, Field, field_validator
@@ -9,8 +9,46 @@ from state import AgentContext, RunState
 
 
 ArgsT = TypeVar("ArgsT", bound=BaseModel)
-ToolHandler = Callable[[ArgsT, RunState, AgentContext], Awaitable[dict[str, Any]]]
 MAX_DELEGATED_QUERIES = 3
+
+
+@dataclass(slots=True)
+class ReadFileMetadata:
+    path: str
+    contents: str
+
+
+@dataclass(slots=True)
+class ModifyTodoMetadata:
+    action: Literal["add", "remove"]
+    todos: list[str]
+
+
+@dataclass(slots=True)
+class SearchWebMetadata:
+    query: str
+    raw_results: Any
+
+
+@dataclass(slots=True)
+class DelegateSearchMetadata:
+    queries: list[str]
+    results: list[dict[str, str]]
+    query_answers_xml: str
+
+
+ToolMetadata: TypeAlias = (
+    ReadFileMetadata | ModifyTodoMetadata | SearchWebMetadata | DelegateSearchMetadata
+)
+
+
+@dataclass(slots=True)
+class ToolExecutionResult:
+    model_response: dict[str, Any]
+    metadata: ToolMetadata | None = None
+
+
+ToolHandler = Callable[[ArgsT, RunState, AgentContext], Awaitable[ToolExecutionResult]]
 
 
 @dataclass(slots=True)
@@ -45,19 +83,29 @@ async def read_file(
     args: ReadFileArgs,
     state: RunState,
     context: AgentContext,
-) -> dict[str, Any]:
+) -> ToolExecutionResult:
     path = Path(args.path)
     if not path.exists() or not path.is_file():
-        return {"error": f"File does not exist: {args.path}"}
+        return ToolExecutionResult(
+            model_response={"error": f"File does not exist: {args.path}"}
+        )
 
-    return {
-        "result": f"""
+    contents = path.read_text(encoding="utf-8")
+
+    return ToolExecutionResult(
+        model_response={
+            "result": f"""
 Read file at path {args.path}
 
 <content>
-{path.read_text(encoding="utf-8")}
+{contents}
 </content>""".strip()
-    }
+        },
+        metadata=ReadFileMetadata(
+            path=args.path,
+            contents=contents,
+        ),
+    )
 
 
 class ModifyTodoArgs(BaseModel):
@@ -69,17 +117,20 @@ async def modify_todo(
     args: ModifyTodoArgs,
     state: RunState,
     context: AgentContext,
-) -> dict[str, Any]:
+) -> ToolExecutionResult:
     if args.action == "add":
         state.add_todos(args.todos)
-        return {
-            "result": f"""
+        return ToolExecutionResult(
+            model_response={
+                "result": f"""
 Todos updated to
 
 <todos>
 {chr(10).join(state.todos)}
 </todos>""".strip()
-        }
+            },
+            metadata=ModifyTodoMetadata(action=args.action, todos=list(args.todos)),
+        )
 
     requested = [todo.strip() for todo in args.todos]
     missing = []
@@ -89,17 +140,22 @@ Todos updated to
             missing.append(todo)
 
     if missing:
-        return {"error": f"Todos not found: {', '.join(missing)}"}
+        return ToolExecutionResult(
+            model_response={"error": f"Todos not found: {', '.join(missing)}"}
+        )
 
     state.remove_todos(args.todos)
-    return {
-        "result": f"""
+    return ToolExecutionResult(
+        model_response={
+            "result": f"""
 Todos updated to
 
 <todos>
 {chr(10).join(state.todos)}
 </todos>""".strip()
-    }
+        },
+        metadata=ModifyTodoMetadata(action=args.action, todos=list(args.todos)),
+    )
 
 
 class SearchWebArgs(BaseModel):
@@ -110,10 +166,12 @@ async def search_web(
     args: SearchWebArgs,
     state: RunState,
     context: AgentContext,
-) -> dict[str, Any]:
+) -> ToolExecutionResult:
     exa = context.exa
     if exa is None:
-        return {"error": "Exa client is not configured."}
+        return ToolExecutionResult(
+            model_response={"error": "Exa client is not configured."}
+        )
 
     results = exa.search(
         args.query,
@@ -136,14 +194,20 @@ async def search_web(
 </result>""".strip()
         )
 
-    return {
-        "result": f"""
+    return ToolExecutionResult(
+        model_response={
+            "result": f"""
 Search results for: {args.query}
 
 <results>
 {chr(10).join(formatted_results)}
 </results>""".strip()
-    }
+        },
+        metadata=SearchWebMetadata(
+            query=args.query,
+            raw_results=results,
+        ),
+    )
 
 
 class DelegateSearchArgs(BaseModel):
@@ -178,39 +242,40 @@ async def delegate_search(
     args: DelegateSearchArgs,
     state: RunState,
     context: AgentContext,
-) -> dict[str, Any]:
+) -> ToolExecutionResult:
     if context.search_agent_runner is None:
-        return {"error": "Search subagent runner is not configured."}
+        return ToolExecutionResult(
+            model_response={"error": "Search subagent runner is not configured."}
+        )
 
     results = await context.search_agent_runner(args.queries)
     if not results:
-        return {"error": "Search subagent did not return any results."}
+        return ToolExecutionResult(
+            model_response={"error": "Search subagent did not return any results."}
+        )
 
-    formatted_results = []
+    query_answers_xml = []
     for item in results:
-        formatted_results.append(
+        query_answers_xml.append(
             f"""
-<result>
+<query_answer>
 <query>{item["query"]}</query>
 <answer>
 {item["answer"]}
 </answer>
-</result>""".strip()
+</query_answer>""".strip()
         )
 
-    return {
-        "result": f"""
-Subagent answers:
-
-<queries>
-{chr(10).join(f"- {query}" for query in args.queries)}
-</queries>
-
-<results>
-{chr(10).join(formatted_results)}
-</results>
-""".strip()
-    }
+    return ToolExecutionResult(
+        model_response={
+            "queries": list(args.queries),
+            "results": results,
+        },
+        metadata=DelegateSearchMetadata(
+            queries=list(args.queries),
+            results=results,
+        ),
+    )
 
 
 READ_FILE_TOOL = Tool(

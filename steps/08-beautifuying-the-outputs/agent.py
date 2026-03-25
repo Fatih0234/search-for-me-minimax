@@ -5,7 +5,14 @@ from google.genai import Client, types
 from rich import print
 
 from state import AgentContext, RunConfig, RunState
-from tools import Tool
+from tools import (
+    DelegateSearchMetadata,
+    ModifyTodoMetadata,
+    ReadFileMetadata,
+    SearchWebMetadata,
+    Tool,
+    ToolExecutionResult,
+)
 
 
 MessageHook: TypeAlias = Callable[
@@ -19,7 +26,7 @@ LLMToolCallHook: TypeAlias = Callable[
 ]
 
 ToolResultHook: TypeAlias = Callable[
-    [types.FunctionCall, dict[str, Any], RunConfig, RunState, AgentContext],
+    [types.FunctionCall, ToolExecutionResult, RunConfig, RunState, AgentContext],
     Awaitable[None] | None,
 ]
 
@@ -78,8 +85,12 @@ class Agent:
         if call.args is None:
             raise RuntimeError(f"Tool call '{call.name}' did not include arguments.")
         args = tool.args_model.model_validate(call.args)
-        response = await tool.handler(args, self.state, self.context)
-        return {"name": call.name, "response": response}
+        execution_result = await tool.handler(args, self.state, self.context)
+        return {
+            "name": call.name,
+            "execution_result": execution_result,
+            "response": execution_result.model_response,
+        }
 
     def render_todos(self, previous_state: RunState, current_state: RunState) -> None:
         if previous_state.todos == current_state.todos:
@@ -149,7 +160,7 @@ class Agent:
                 await self.emit(
                     "tool_result",
                     call=call,
-                    result=result,
+                    result=result["execution_result"],
                     config=self.config,
                     state=self.state,
                     context=self.context,
@@ -188,10 +199,38 @@ async def render_tool_call(
 
 async def render_tool_result(
     call: types.FunctionCall,
-    result: dict[str, Any],
+    result: ToolExecutionResult,
     config: RunConfig,
     state: RunState,
     context: AgentContext,
 ) -> None:
     print("\nTool Result:")
-    print(result["response"])
+    metadata = result.metadata
+    if isinstance(metadata, SearchWebMetadata):
+        print(f"Query: {metadata.query}")
+        print(f"Results: {len(metadata.raw_results.results)}")
+        top_titles = [
+            item.title or item.url for item in metadata.raw_results.results[:3]
+        ]
+        if top_titles:
+            print("Top titles:")
+            for title in top_titles:
+                print(f"- {title}")
+        return
+    if isinstance(metadata, DelegateSearchMetadata):
+        print(f"Delegated queries: {len(metadata.queries)}")
+        for query in metadata.queries:
+            print(f"- {query}")
+        print(f"Answers returned: {len(metadata.results)}")
+        return
+    if isinstance(metadata, ReadFileMetadata):
+        print(f"Path: {metadata.path}")
+        print(metadata.contents)
+        return
+    if isinstance(metadata, ModifyTodoMetadata):
+        print(f"{metadata.action.title()} todos:")
+        for todo in metadata.todos:
+            print(f"- {todo}")
+        return
+
+    print(result.model_response)
