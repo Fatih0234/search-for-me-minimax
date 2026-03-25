@@ -28,6 +28,11 @@ ToolResultHook: TypeAlias = Callable[
 HookType: TypeAlias = Literal["message", "llm_tool_call", "tool_result"]
 AnyHook: TypeAlias = MessageHook | LLMToolCallHook | ToolResultHook
 
+MAX_ITERATIONS_REACHED_MESSAGE = (
+    "You've reached the maximum number of iterations, generate a quick summary "
+    "of everything you've accomplished."
+)
+
 
 class Agent:
     def __init__(
@@ -67,6 +72,14 @@ class Agent:
         tools = []
         if self.state.iteration_count < self.config.max_iterations:
             tools = [tool.to_genai_tool() for tool in self.tools.values()]
+        else:
+            contents.append(
+                types.UserContent(
+                    parts=[
+                        types.Part.from_text(text=MAX_ITERATIONS_REACHED_MESSAGE)
+                    ]
+                )
+            )
         config = types.GenerateContentConfig(
             tools=tools,
             system_instruction=self.system_instruction,
