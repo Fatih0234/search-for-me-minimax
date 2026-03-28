@@ -437,9 +437,9 @@ async def render_tool_result(
 ) -> None:
     error = result.model_response.get("error")
     if error:
-        print()
-        print(f"[red]Tool error ({call.name}):[/red]")
-        print(Markdown(f"```text\n{error}\n```"))
+        # print()
+        # print(f"[red]Tool error ({call.name}):[/red]")
+        # print(Markdown(f"```text\n{error}\n```"))
         return
 
     metadata = result.metadata

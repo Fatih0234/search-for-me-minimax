@@ -75,9 +75,7 @@ class Agent:
         else:
             contents.append(
                 types.UserContent(
-                    parts=[
-                        types.Part.from_text(text=MAX_ITERATIONS_REACHED_MESSAGE)
-                    ]
+                    parts=[types.Part.from_text(text=MAX_ITERATIONS_REACHED_MESSAGE)]
                 )
             )
         config = types.GenerateContentConfig(
@@ -113,9 +111,7 @@ class Agent:
         except ValidationError as error:
             execution_result = ToolExecutionResult(
                 model_response={
-                    "error": (
-                        f"Invalid arguments for tool '{call.name}':\n{error}"
-                    )
+                    "error": (f"Invalid arguments for tool '{call.name}':\n{error}")
                 }
             )
             return {
@@ -244,9 +240,9 @@ async def render_tool_result(
 ) -> None:
     error = result.model_response.get("error")
     if error:
-        print()
-        print(f"[red]Tool error ({call.name}):[/red]")
-        print(Markdown(f"```text\n{error}\n```"))
+        #     print()
+        #     print(f"[red]Tool error ({call.name}):[/red]")
+        #     print(Markdown(f"```text\n{error}\n```"))
         return
 
     metadata = result.metadata
