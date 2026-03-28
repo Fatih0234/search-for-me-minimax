@@ -38,7 +38,7 @@ class RunState:
             removed.append(existing)
         return removed, not_found
 
-    def is_incomplete(self, config: RunConfig) -> str | None:
+    def is_incomplete(self) -> str | None:
         if self.todos:
             return f"""
 You still have pending todos.

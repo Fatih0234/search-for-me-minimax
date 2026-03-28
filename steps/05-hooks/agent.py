@@ -58,6 +58,16 @@ class AgentRuntime:
         tools = []
         if self.state.iteration_count < self.config.max_iterations:
             tools = [tool.to_genai_tool() for tool in self.tools.values()]
+        else:
+            contents.append(
+                types.UserContent(
+                    parts=[
+                        types.Part.from_text(
+                            text="You've reached the maximum number of iterations please summarise what you've done and return your response"
+                        )
+                    ]
+                )
+            )
         config = types.GenerateContentConfig(tools=tools)
         return config, list(contents)
 
